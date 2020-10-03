@@ -1,39 +1,32 @@
 use actix_web::{web, HttpResponse};
 use chrono::Utc;
-use serde::Deserialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-#[derive(Deserialize)]
-pub struct FormData {
+#[derive(serde::Deserialize)]
+pub struct SubscribeRequest {
     email: String,
     name: String,
 }
 
 pub async fn subscribe(
-    form: web::Form<FormData>,
-    connection: web::Data<PgPool>,
+    payload: web::Form<SubscribeRequest>,
+    pool: web::Data<PgPool>,
 ) -> Result<HttpResponse, HttpResponse> {
     sqlx::query!(
         r#"
-        INSERT INTO subscriptions (id, email, name, subscribed_at)
-        VALUES ($1, $2, $3, $4)
-        "#,
+    INSERT INTO subscriptions (id, email, name, subscribed_at)
+    VALUES ($1, $2, $3, $4)
+            "#,
         Uuid::new_v4(),
-        form.email,
-        form.name,
+        payload.email,
+        payload.name,
         Utc::now()
     )
-    // There is a bit of cerenomy here to get our hands on a &PgConnection.
-    // web::Data<Arc<PgConnection>> is equivalent to Arc<Arc<PgConnection>>
-    // Therefore connection.get_ref() returns a &Arc<PgConnection>
-    // which we can then deref to a &PgConnection.
-    // We could have avoided the double Arc wrapping using .app_data()
-    // instead of .data() in src/startup.rs
-    .execute(connection.get_ref())
+    .execute(pool.as_ref())
     .await
     .map_err(|e| {
-        eprintln!("Failed to execute query: {}", e);
+        println!("Failed to execute query: {}", e);
         HttpResponse::InternalServerError().finish()
     })?;
     Ok(HttpResponse::Ok().finish())
